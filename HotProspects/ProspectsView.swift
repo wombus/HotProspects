@@ -1,9 +1,46 @@
 import SwiftUI
 import CodeScanner
+import UserNotifications
+
 
 struct ProspectsView: View {
     @EnvironmentObject var prospects: Prospects
     @State private var isShowingScanner = false
+    
+    func addNotification(for prospect: Prospect) {
+        let center = UNUserNotificationCenter.current()
+        
+        let addRequest = {
+            let content = UNMutableNotificationContent()
+            content.title = "Contact \(prospect.name)"
+            content.subtitle = prospect.emailAddress
+            content.sound = UNNotificationSound.default
+            
+            var dateComponents = DateComponents()
+            dateComponents.hour = 9
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+            
+            center.add(request)
+        }
+        
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .authorized {
+                addRequest()
+            } else {
+                center.requestAuthorization(options: [.alert, .badge, .sound]) { success, error in
+                    if success {
+                        addRequest()
+                    } else {
+                        print("D'oh")
+                    }
+                }
+            }
+        }
+    }
+    
     
     func handleScan(result: Result<ScanResult, ScanError>) {
         isShowingScanner = false
@@ -17,7 +54,9 @@ struct ProspectsView: View {
             person.name = details[0]
             person.emailAddress = details[1]
             
-            prospects.people.append(person)
+            //prospects.people.append(person)
+            //prospects.save()
+            prospects.add(person)
         case .failure(let error):
             print("Scanning failed: \(error.localizedDescription)")
         }
@@ -52,8 +91,42 @@ struct ProspectsView: View {
     
     var body: some View {
         NavigationView {
-            Text("People: \(prospects.people.count)")
-                .toolbar {
+            //Text("People: \(prospects.people.count)")
+            List {
+                ForEach(filteredProspects) { prospect in
+                    VStack(alignment: .leading) {
+                        Text(prospect.name)
+                            .font(.headline)
+                        Text(prospect.emailAddress)
+                            .foregroundColor(.secondary)
+                    }
+                    .swipeActions {
+                        if prospect.isContacted {
+                            Button {
+                                prospects.toggle(prospect)
+                            } label: {
+                                Label("Mark Uncontacted", systemImage: "person.crop.circle.badge.xmark")
+                            }
+                            .tint(.blue)
+                        } else {
+                            Button {
+                                prospects.toggle(prospect)
+                            } label: {
+                                Label("Mark Contacted", systemImage: "person.crop.circle.fill.badge.checkmark")
+                            }
+                            .tint(.green)
+                        }
+                        Button {
+                            addNotification(for: prospect)
+                        } label: {
+                            Label("Remind Me", systemImage: "bell")
+                        }
+                        .tint(.orange)
+                        
+                    }
+                }
+            }
+            .toolbar {
                     Button {
                         isShowingScanner = true
                     } label: {
